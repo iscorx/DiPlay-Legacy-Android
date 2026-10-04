@@ -3023,7 +3023,7 @@ class CarPlayHostActivity : ComponentActivity() {
                 runOnUiThread {
                     if (activeAirPlaySession === session) activeAirPlaySession = null
                     CarPlayBackgroundSession.active = false
-                    EadoEvents.endSession()
+                    if (controllerGeneration == restartGeneration) EadoEvents.endSession()
                     if (menuOpen || controllerGeneration != restartGeneration) {
                         return@runOnUiThread
                     }

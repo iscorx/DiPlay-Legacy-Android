@@ -181,7 +181,7 @@ class EadoCompatibilityActivity : Activity() {
         val facts = LinkedHashMap(quickFacts)
         val stages = EadoEvents.snapshot()
         listOf("iAP2", "MFi", "Bonjour", "AirPlay", "CarPlay session", "Video", "Audio", "Touch").forEach {
-            facts[it] = stages.getValue(it).substringBefore(" ")
+            facts[it] = stages.getValue(it).let { state -> if (state.startsWith("NOT STARTED")) "UNKNOWN" else state.substringBefore(" ") }
         }
         facts.entries.chunked(3).forEach { entries ->
             val row = LinearLayout(this)
