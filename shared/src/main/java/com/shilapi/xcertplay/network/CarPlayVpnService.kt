@@ -93,7 +93,7 @@ class CarPlayVpnService : VpnService() {
                 .addRoute(LINK_LOCAL_ROUTE, LINK_PREFIX)
                 .setSession(SESSION_NAME)
                 .setMtu(TUN_MTU)
-            .apply { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) setBlocking(true) }
+            .apply { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) { setBlocking(true); addAllowedApplication(packageName) } }
                 .establish()
                 ?: throw IOException("VpnService.establish returned null")
             tun = tunFd
@@ -153,6 +153,8 @@ class CarPlayVpnService : VpnService() {
         releaseLocked()
     }
 
+    fun boundPort(): Int? = attachment?.config?.port
+
     fun isAttached(): Boolean = active.get() && attachment != null
 
     override fun onDestroy() {
@@ -164,10 +166,12 @@ class CarPlayVpnService : VpnService() {
         generation: Int,
         replacement: AirPlayAttachment,
     ) {
-        val server = ServerSocket()
-        server.bind(InetSocketAddress(replacement.address, replacement.config.port))
-        attachment = replacement
+        val server = AirPlayPortSelector.bind(replacement.address, replacement.config.port) { busy, bound ->
+            replacement.listener.onDebugLog("AirPlay port $busy busy; fallback bound=$bound")
+        }
+        attachment = replacement.copy(config = replacement.config.copy(port = server.localPort))
         serverSocket = server
+        replacement.listener.onDebugLog("AirPlay listener SUCCESS port=${server.localPort} family=${if (replacement.address is Inet6Address) "IPv6" else "IPv4"}")
         Thread(
             { acceptLoop(generation, server) },
             "airplay-accept",
@@ -198,6 +202,7 @@ class CarPlayVpnService : VpnService() {
                         socket.close()
                         return
                     }
+                    current.listener.onDebugLog("AirPlay incoming TCP connection")
                     AirPlaySession(
                         socket = socket,
                         config = current.config,

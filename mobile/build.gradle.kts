@@ -17,8 +17,8 @@ android {
         minSdk = 19
         targetSdk = 37
         multiDexEnabled = true
-        versionCode = 26
-        versionName = "0.2.7"
+        versionCode = 30
+        versionName = "0.2.7-eado.1"
 
     }
 
@@ -27,6 +27,8 @@ android {
 
     signingConfigs {
         create("release") {
+            enableV1Signing = true
+            enableV2Signing = true
             storeFile = file(
                 providers.environmentVariable("ANDROID_KEYSTORE_PATH")
                     .getOrElse("missing-release-keystore.jks"),

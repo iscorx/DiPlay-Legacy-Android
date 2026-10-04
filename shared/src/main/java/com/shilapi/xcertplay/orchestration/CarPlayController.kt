@@ -926,7 +926,7 @@ class CarPlayController(
             }
             debugLog(
                 "wireless AirPlay listener attached bind=$hostAddressText " +
-                    "port=${airPlayConfig.port}",
+                    "port=${service.boundPort()}",
             )
             if (isStaleWirelessRun(generation)) {
                 closeWirelessStack()
@@ -935,7 +935,7 @@ class CarPlayController(
 
             val bonjourClient = CarPlayBonjour(
                 context = appContext,
-                config = wirelessAirPlayConfig,
+                config = wirelessAirPlayConfig.copy(port = service.boundPort() ?: wirelessAirPlayConfig.port),
                 identity = identity,
                 advertisedHost = hostAddress.hostAddress,
                 // Bind discovery and its connect probe to the same AP/address family as AirPlay.
@@ -986,7 +986,7 @@ class CarPlayController(
                 channel = hotspotInfo.channel,
                 security = hotspotInfo.security,
                 ipAddresses = listOf(hostAddressText),
-                airPlayPort = airPlayConfig.port,
+                airPlayPort = vpnService?.boundPort() ?: airPlayConfig.port,
                 deviceIdentifier = deviceIdentifier,
                 publicKey = identity.publicKeyHex,
                 sourceVersion = airPlayConfig.sourceVersion,
@@ -1429,7 +1429,7 @@ class CarPlayController(
         var ncmOwnedLocally = true
         try {
             if (closed) return
-            val mux = Iap2UsbMuxHost.open(usbSession)
+            val mux = Iap2UsbMuxHost.open(usbSession, onDiagnostic = ::debugLog)
             this.mux = mux
             debugLog("wired USBMUX host opened")
             onStatus(CarPlayStatus.Pairing)
@@ -1534,7 +1534,7 @@ class CarPlayController(
                 ?: throw IphoneUsbException.DeviceUnavailable("MFi coprocessor client is unavailable")
             val endpoint = Iap2WiredCarPlayEndpoint(
                 ipv6Addresses = listOf(config.linkLocal),
-                airPlayPort = airPlayConfig.port,
+                airPlayPort = vpnService?.boundPort() ?: airPlayConfig.port,
                 publicKey = identity.publicKeyHex,
                 sourceVersion = airPlayConfig.sourceVersion,
                 deviceIdentifier = ncmHostMac.macString(),
@@ -1598,6 +1598,7 @@ class CarPlayController(
             else -> config.wirelessHotspotMode
         }
         if (hotspotMode == WirelessHotspotMode.MANUAL &&
+            appContext.getSharedPreferences("eado", Context.MODE_PRIVATE).getInt("network_mode", 0) != 2 &&
             com.shilapi.xcertplay.network.CarHotspotStatus.isEnabled(appContext) == false
         ) {
             throw IOException("The car hotspot is off. Turn it on in the car settings and connect again.")

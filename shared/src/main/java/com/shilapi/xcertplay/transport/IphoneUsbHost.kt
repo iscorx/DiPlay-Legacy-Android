@@ -262,7 +262,7 @@ class IphoneUsbHost(
                 throw IphoneUsbException.DeviceUnavailable("Android could not claim USBMUX interface 1")
             }
             claimedInterface = usbMux
-            return Iap2UsbSession(connection, endpoints.first, endpoints.second)
+            return Iap2UsbSession(connection, endpoints.first, endpoints.second, appContext.getSharedPreferences("eado", Context.MODE_PRIVATE).getInt("usb_backend", 0) == 1)
         } catch (error: Throwable) {
             if (claimedInterface != null) connection.releaseInterface(claimedInterface)
             connection.close()
@@ -327,6 +327,7 @@ class Iap2UsbSession internal constructor(
     private val connection: UsbDeviceConnection,
     private val outEndpoint: UsbEndpoint,
     private val inEndpoint: UsbEndpoint,
+    private val forceBulk: Boolean = false,
 ) : Closeable {
     private val stateLock = Any()
     private val readLock = Any()
@@ -339,6 +340,13 @@ class Iap2UsbSession internal constructor(
         checkOpen()
         require(timeoutMillis > 0) { "timeoutMillis must be positive" }
         if (data.isEmpty()) return@synchronized
+        if (Build.VERSION.SDK_INT < 28) {
+            writeLegacyUsb(data, timeoutMillis) { chunk, remaining ->
+                checkOpen()
+                connection.bulkTransfer(outEndpoint, chunk, chunk.size, remaining)
+            }
+            return@synchronized
+        }
         val transferred = connection.bulkTransfer(outEndpoint, data, data.size, timeoutMillis)
         if (transferred != data.size) {
             throw IphoneUsbException.DeviceUnavailable(
@@ -347,10 +355,16 @@ class Iap2UsbSession internal constructor(
         }
     }
 
-    /** Returns null only when no completed USB request arrives before [timeoutMillis]. */
+    /** Legacy bulkTransfer conflates timeout and I/O failure; the protocol deadline bounds both. */
     fun read(timeoutMillis: Long): ByteArray? = synchronized(readLock) {
         checkOpen()
         require(timeoutMillis > 0) { "timeoutMillis must be positive" }
+        if (forceBulk || Build.VERSION.SDK_INT < 26) {
+            val buffer = ByteArray(16 * 1024) // pre-P Android bulk transfer maximum
+            val size = connection.bulkTransfer(inEndpoint, buffer, buffer.size, timeoutMillis.coerceIn(1, 2000).toInt())
+            checkOpen()
+            return@synchronized if (size > 0) buffer.copyOf(size) else null
+        }
         val request = UsbRequest()
         var initialized = false
         try {

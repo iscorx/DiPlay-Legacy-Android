@@ -75,7 +75,8 @@ class ManualHotspotManager(
         require(timeoutMillis > 0) { "timeoutMillis must be positive" }
 
         val deadlineNanos = deadlineAfter(timeoutMillis)
-        val apConfiguration = readApConfiguration()
+        val external = appContext.getSharedPreferences("eado", Context.MODE_PRIVATE).getInt("network_mode", 0) == 2
+        val apConfiguration = if (external) null else readApConfiguration()
         if (apConfiguration != null && apConfiguration.ssid != expectedSsid) {
             throw IOException(
                 "Manual hotspot SSID does not match the active local AP configuration: " +
@@ -87,7 +88,7 @@ class ManualHotspotManager(
         var lastReason = "local hotspot interface was not found"
         while (true) {
             check(!closed) { "ManualHotspotManager is closed" }
-            val localInterface = findLocalHotspotInterface()
+            val localInterface = if (external) findStationInterface() else findLocalHotspotInterface()
             if (localInterface != null) {
                 val connectionFrequency = frequencyFromConnectionInfo()
                 val scanFrequency = frequencyFromScanResult(localInterface)
@@ -198,6 +199,22 @@ class ManualHotspotManager(
         }
     }
 
+    private fun findStationInterface(): LocalHotspotInterface? {
+        @Suppress("DEPRECATION")
+        val info = wifiManager.connectionInfo ?: return null
+        if (info.supplicantState != android.net.wifi.SupplicantState.COMPLETED) return null
+        if (unquote(info.ssid) != expectedSsid) throw IOException("Shared Wi-Fi differs from saved connection setup; update its credentials")
+        val ip = info.ipAddress
+        if (ip == 0) return null
+        val bytes = byteArrayOf(ip.toByte(), (ip ushr 8).toByte(), (ip ushr 16).toByte(), (ip ushr 24).toByte())
+        val address = InetAddress.getByAddress(bytes)
+        val intf = NetworkInterface.getByInetAddress(address) ?: return null
+        if (!intf.isUp || intf.isLoopback) return null
+        onDiagnostic("External shared Wi-Fi selected iface=${intf.name} family=IPv4")
+        return LocalHotspotInterface(intf.name, address,
+            runCatching { intf.hardwareAddress?.toMacAddressString() }.getOrNull(), 100)
+    }
+
     private fun findLocalHotspotInterface(): LocalHotspotInterface? {
         val interfaces = try {
             NetworkInterface.getNetworkInterfaces()
@@ -256,7 +273,9 @@ class ManualHotspotManager(
     }
 
     private fun NetworkInterface.hotspotAddress(): InetAddress? =
-        wirelessHostAddress(Collections.list(inetAddresses), index)
+        if (appContext.getSharedPreferences("eado", Context.MODE_PRIVATE).getInt("network_mode", 0) == 1)
+            Collections.list(inetAddresses).firstOrNull { it is Inet4Address && !it.isLoopbackAddress }
+        else wirelessHostAddress(Collections.list(inetAddresses), index)
 
     private fun frequencyFromConnectionInfo(): Int? {
         val connectionInfo = try {
