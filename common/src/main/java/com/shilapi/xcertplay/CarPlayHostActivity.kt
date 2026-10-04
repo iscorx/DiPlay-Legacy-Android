@@ -110,6 +110,7 @@ class CarPlayHostActivity : ComponentActivity() {
     private var connectionPanel: View? = null
     private var wifiRecoveryButton: View? = null
     private var reconnectAttempts = 0
+    private var eadoVideoFallbacks = 0
     private lateinit var airPlayIdentity: AirPlayIdentity
     private var languagePreferenceAtCreate = AppLocale.SYSTEM
 
@@ -3009,6 +3010,8 @@ class CarPlayHostActivity : ComponentActivity() {
                     }
                     activeAirPlaySession = session
                     CarPlayBackgroundSession.active = true
+                    EadoEvents.stage("AirPlay", "SUCCESS", "AirPlay session active callback")
+                    EadoEvents.stage("CarPlay session", "SUCCESS", "AirPlay session active callback")
                     reconnectAttempts = 0
                     syncAirPlayDarkMode()
                     if (menuOpen) return@runOnUiThread
@@ -3020,6 +3023,7 @@ class CarPlayHostActivity : ComponentActivity() {
                 runOnUiThread {
                     if (activeAirPlaySession === session) activeAirPlaySession = null
                     CarPlayBackgroundSession.active = false
+                    EadoEvents.endSession()
                     if (menuOpen || controllerGeneration != restartGeneration) {
                         return@runOnUiThread
                     }
@@ -3062,6 +3066,18 @@ class CarPlayHostActivity : ComponentActivity() {
     private fun createStatusReporter(
         controllerGeneration: Int,
     ): (CarPlayStatus) -> Unit = { status ->
+        if (controllerGeneration == restartGeneration) {
+            when (status) {
+                CarPlayStatus.DiscoveringIphone -> EadoEvents.stage("Device detection", "RUNNING", "USB discovery")
+                CarPlayStatus.RequestingIphonePermission -> EadoEvents.stage("USB/Wi-Fi", "RUNNING", "USB permission requested")
+                CarPlayStatus.OpeningDataPaths -> EadoEvents.stage("USB/Wi-Fi", "RUNNING", "Opening data paths")
+                CarPlayStatus.ConnectingBluetooth -> EadoEvents.stage("Bluetooth handoff", "RUNNING", "RFCOMM connecting")
+                CarPlayStatus.MfiReady -> EadoEvents.log("Local authentication provider loaded; acceptance not implied")
+                is CarPlayStatus.HotspotReady -> EadoEvents.stage("USB/Wi-Fi", "SUCCESS", "Local interface available; phone association UNKNOWN")
+                is CarPlayStatus.Failed -> EadoEvents.log("Transport FAILED: ${status.message}; no system changes applied")
+                else -> Unit
+            }
+        }
         if (!menuOpen && controllerGeneration == restartGeneration) {
             updateHotspotStatus(status)
             val description = status.describe()
@@ -3298,6 +3314,17 @@ class CarPlayHostActivity : ComponentActivity() {
         if (!CarPlayBackgroundSession.isOwner(this)) return
         if (shuttingDown.get() || menuOpen || handshakeResetInProgress) return
         if (reconnectScheduled) return
+        if (Build.VERSION.SDK_INT <= 27) {
+            if (reason.contains("authentication", true) || reason.contains("mfi", true)) {
+                EadoEvents.stage("MFi", "FAILED", "Authentication stopped; inspect provider and phone response. No automatic retry.")
+                return
+            }
+            if (reconnectAttempts >= 1) {
+                EadoEvents.log("Safe recovery exhausted 1/1; use Compatibility Center to inspect and restart")
+                return
+            }
+            EadoEvents.log("Safe transport recreation retry 1/1")
+        }
         reconnectScheduled = true
         val generation = restartGeneration
         val delayMillis = if (reason.contains("AirPlay iAP tunnel", ignoreCase = true)) {
@@ -3492,6 +3519,7 @@ class CarPlayHostActivity : ComponentActivity() {
 
         val contacts = CarPlayTouchMapper.contacts(event, view.width, view.height)
         val queued = controller?.sendTouch(contacts) ?: false
+        if (queued && event.actionMasked == MotionEvent.ACTION_UP) EadoEvents.stage("Touch", "RUNNING", "Input mapped and queued; phone response requires confirmation")
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN,
             MotionEvent.ACTION_POINTER_DOWN,
@@ -3568,6 +3596,18 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun appendLog(message: String) {
+        if (Build.VERSION.SDK_INT <= 27 && message.startsWith("Video: decoder configuration failed")) {
+            mainHandler.post {
+                if (eadoVideoFallbacks < 2 && !handshakeResetInProgress && !shuttingDown.get()) {
+                    eadoVideoFallbacks++
+                    hevcEnabled = false
+                    fps = 30
+                    displayScaleTenths = if (eadoVideoFallbacks == 1) 8 else 6
+                    EadoEvents.stage("Video", "RUNNING", "Decoder failed; safe retry $eadoVideoFallbacks/2 H.264 30fps ${displayScaleTenths * 10}%")
+                    restartCarPlay("Eado bounded video fallback")
+                } else EadoEvents.stage("Video", "FAILED", "Decoder fallback exhausted; inspect codec error")
+            }
+        }
         val safe = DiagnosticRedactor.redact(message) ?: return
         sessionLog?.append(formattedLogLine(safe, System.currentTimeMillis()))
     }

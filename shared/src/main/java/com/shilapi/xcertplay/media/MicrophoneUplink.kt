@@ -214,7 +214,7 @@ internal class MicrophoneUplink(private val config: MicrophoneConfig) : Closeabl
                 Log.i(
                     TAG,
                     "microphone first packet bytes=${packet.size} body=${body.size} " +
-                        "head=${packet.copyOf(minOf(packet.size, 16)).toHexString()} " +
+                        "content=omitted" +
                         "port=${config.port}",
                 )
             }

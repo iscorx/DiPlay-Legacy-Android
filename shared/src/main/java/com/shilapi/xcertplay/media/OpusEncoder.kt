@@ -113,7 +113,7 @@ internal class OpusEncoder(bitrate: Int) : Closeable {
                             Log.i(
                                 TAG,
                                 "Opus microphone packet=$outputPackets bytes=${bytes.size} " +
-                                    "head=${bytes.copyOf(minOf(bytes.size, 16)).toHexString()}",
+                                    "content=omitted",
                             )
                         }
                     }

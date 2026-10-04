@@ -393,7 +393,7 @@ private class VideoDecoder(
             Log.i(
                 TAG,
                 "video decoder first input avcc=${nalus.size} annexB=${annexB.size} " +
-                    "head=${annexB.take(16).joinToString("") { "%02x".format(it.toInt() and 0xff) }}",
+                    "content=omitted",
             )
         }
         val index = VideoInputPump.acquire(
@@ -632,7 +632,7 @@ private class AudioRenderer(
             Log.i(
                 TAG,
                 "audio AAC config rate=${format.sampleRate} channels=${format.channels} " +
-                    "csd0=${aacAudioSpecificConfig().toHexString()}",
+                    "content=omitted",
             )
         }
         codec = try {
@@ -833,7 +833,7 @@ private class AudioRenderer(
                         Log.i(
                             TAG,
                             "audio AAC access unit bytes=${accessUnit.size} " +
-                                "head=${accessUnit.copyOf(minOf(accessUnit.size, 16)).toHexString()}",
+                                "content=omitted",
                         )
                     }
                     feedCodec(
@@ -850,7 +850,7 @@ private class AudioRenderer(
                         Log.i(
                             TAG,
                             "audio Opus skipping short packet bytes=${accessUnit.size} " +
-                                "head=${accessUnit.toHexString()}",
+                                "content=omitted",
                         )
                     }
                     return
@@ -893,7 +893,7 @@ private class AudioRenderer(
                 Log.i(
                     TAG,
                     "audio decoder first input codec=${format.codec} bytes=${payload.size} " +
-                        "head=${payload.copyOf(minOf(payload.size, 16)).toHexString()}",
+                        "content=omitted",
                 )
             }
         } else {
@@ -950,12 +950,7 @@ private class AudioRenderer(
         val track = track ?: return
         if (!firstPcmLogged && length > 0) {
             firstPcmLogged = true
-            val end = minOf(data.size, offset + minOf(length, 16))
-            Log.i(
-                TAG,
-                "audio first PCM type=${format.payloadType} bytes=$length " +
-                    "head=${data.copyOfRange(offset, end).toHexString()}",
-            )
+            report("audio first PCM type=${format.payloadType} bytes=$length")
         }
         if (!fadeApplied) {
             applyFadeIn(data, offset, length)
@@ -983,7 +978,7 @@ private class AudioRenderer(
                 prebufferBytes += count
                 if (prebufferBytes >= startThresholdBytes) {
                     startPlayback(track)
-                    Log.i(TAG, "audio playback started type=${format.payloadType}")
+                    report("Audio playback started type=${format.payloadType}; device audibility unverified")
                 }
             }
         }

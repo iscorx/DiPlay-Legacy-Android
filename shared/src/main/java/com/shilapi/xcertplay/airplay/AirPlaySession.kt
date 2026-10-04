@@ -179,7 +179,7 @@ class AirPlaySession(
             Log.i(
                 TAG,
                 "airplay touch report sent contacts=${scaled.size} first=" +
-                    "(${first?.x},${first?.y},down=${first?.down}) report=${report.toHexString()}",
+                    "(${first?.x},${first?.y},down=${first?.down}) reportBytes=${report.size}",
             )
         } else if (!sent && touchSendFailureLogged.compareAndSet(false, true)) {
             Log.w(TAG, "airplay touch dropped: event channel is not ready")
@@ -489,7 +489,7 @@ class AirPlaySession(
         for (entry in streams) {
             val stream = asMap(entry) ?: continue
             val type = long(stream["type"])?.toInt() ?: continue
-            debugLog("airplay SETUP stream type=$type payload=$stream")
+            debugLog("airplay SETUP stream type=$type")
             when (type) {
                 STREAM_TYPE_MAIN_SCREEN, STREAM_TYPE_ALT_SCREEN -> {
                     val port = media.onScreen(this, type, stream)
@@ -558,7 +558,7 @@ class AirPlaySession(
 
         debugLog(
             "airplay TEARDOWN types=$types activeBefore=$activeStreams " +
-                "body=${request.body.size} bytes payload=$decodedBody",
+                "body=${request.body.size} bytes (content omitted)",
         )
         trace("airplay TEARDOWN raw${request.body.size}Hex=${request.body.toHex()}")
 

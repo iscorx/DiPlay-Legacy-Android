@@ -7,8 +7,10 @@ import java.io.File
 internal class SessionLogFile(val file: File) : Closeable {
     private val lock = Any()
     private var closed = false
+    private var evidenceGeneration = EadoEvents.sessionGeneration()
     fun reset(header: String) = synchronized(lock) {
         if (!closed) {
+            evidenceGeneration = EadoEvents.beginSession()
             file.parentFile?.mkdirs()
             rotate()
             file.writeText("")
@@ -18,6 +20,7 @@ internal class SessionLogFile(val file: File) : Closeable {
     fun append(line: String) = synchronized(lock) {
         if (closed) return@synchronized
         val safe = DiagnosticRedactor.redact(line) ?: return@synchronized
+        EadoEvents.observe(safe, evidenceGeneration)
         runCatching {
             if (file.length() > MAX_BYTES) {
                 rotate()

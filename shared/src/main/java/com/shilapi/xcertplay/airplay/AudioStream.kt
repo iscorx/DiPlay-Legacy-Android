@@ -124,7 +124,7 @@ class AudioStream(
                         android.util.Log.w(
                             TAG,
                             "audio stream type=$streamType first decrypt failure " +
-                                "wire=${wire.toHexString()}",
+                                "content=omitted",
                             error,
                         )
                     }
@@ -139,7 +139,7 @@ class AudioStream(
                         TAG,
                         "audio stream type=$streamType packet=$decryptedNumber sample=$sample " +
                             "wireBytes=${wire.size} payloadBytes=${payload.size} " +
-                            "payloadHead=${payload.copyOf(minOf(payload.size, 16)).toHexString()}",
+                            "content=omitted",
                     )
                 } else if (decryptedNumber % PACKET_LOG_INTERVAL == 0) {
                     android.util.Log.i(

@@ -251,13 +251,14 @@ class DiPlayActivity : ComponentActivity() {
             card.addView(button(getString(R.string.open_connection_setup), false) { page = "connection"; render() }, matchButton(12, 60))
         }
         section(content, getString(R.string.diagnostics), R.drawable.ic_dp_diagnostics) { card ->
+            card.addView(button("Eado Compatibility Center / View Diagnostic Report", false) { startActivity(Intent(this, EadoCompatibilityActivity::class.java)) }, matchButton(10, 60))
             exportButton = button(if (exportInProgress) getString(R.string.saving_report) else getString(R.string.save_diagnostic_report), false) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) exportDiagnostics()
-                else chooseReportDestination()
+                else exportLegacyReport()
             }.apply { isEnabled = !exportInProgress }
             card.addView(exportButton, matchButton(10, 60))
             card.addView(button(getString(R.string.choose_save_location), false) { chooseReportDestination() }, matchButton(10, 60))
-            val destination = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) getString(R.string.reports_save_to_downloads_diplay) else getString(R.string.choose_where_to_save_your_report)
+            val destination = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) getString(R.string.reports_save_to_downloads_diplay) else "Reports save directly to Download/DiPlay, with app storage fallback. "
             card.addView(label(destination + getString(R.string.nothing_is_sent_automatically_protocol_payloads_and_creden), 14, MUTED).apply { setPadding(0, dp(12), 0, 0) })
         }
         section(content, getString(R.string.automatic_connection), R.drawable.ic_dp_automation) { card ->
@@ -888,6 +889,27 @@ class DiPlayActivity : ComponentActivity() {
         }
         connectButton?.isEnabled = setupError == null
     }
+    private val legacyStorage = registerForActivityResult(ActivityResultContracts.RequestPermission()) { writeLegacyReport() }
+    private fun exportLegacyReport() {
+        if (Build.VERSION.SDK_INT in 23..28 && checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            legacyStorage.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        } else writeLegacyReport()
+    }
+    private fun writeLegacyReport() {
+        if (exportInProgress) return
+        exportInProgress = true
+        Thread({
+            val result = runCatching { EadoReport.save(applicationContext, EadoReport.build(applicationContext)) }
+            runOnUiThread {
+                exportInProgress = false
+                if (!isFinishing && !isDestroyed) AlertDialog.Builder(this)
+                    .setTitle(if (result.isSuccess) "Report saved" else "Report unavailable")
+                    .setMessage(result.getOrElse { "Storage unavailable; open View Diagnostic Report to read or copy it." })
+                    .setPositiveButton("Close", null).show()
+            }
+        }, "eado-legacy-export").start()
+    }
+
     private fun reportFileName() = "DiPlay-${SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US).format(Date())}.txt"
 
     private fun chooseReportDestination() {

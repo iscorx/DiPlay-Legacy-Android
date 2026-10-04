@@ -83,7 +83,7 @@ object AirPlayPersistence {
     fun loadDisplayScaleTenths(context: Context): Int {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         return CarPlayDisplayScale.sanitize(
-            prefs.getInt(KEY_DISPLAY_SCALE_TENTHS, CarPlayDisplayScale.DEFAULT_TENTHS),
+            prefs.getInt(KEY_DISPLAY_SCALE_TENTHS, if (android.os.Build.VERSION.SDK_INT < 28) 8 else CarPlayDisplayScale.DEFAULT_TENTHS),
         )
     }
 

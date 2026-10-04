@@ -38,3 +38,7 @@ release-signing.properties
 *.key
 *.apk
 *.aab
+
+# Explicit external runtime provisioning and local build tools
+.tooling/
+offline-mfi/
